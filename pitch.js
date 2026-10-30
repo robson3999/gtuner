@@ -15,7 +15,8 @@ export function detectPitch(input, sampleRate) {
     samples[i] -= mean;
     energy += samples[i] ** 2;
   }
-  if (Math.sqrt(energy / samples.length) < 0.008) return null;
+  // Keep quiet plucks; the periodicity check below still rejects unpitched noise.
+  if (Math.sqrt(energy / samples.length) < 0.002) return null;
 
   const maxLag = Math.min(Math.ceil(rate / 30), Math.floor(samples.length / 2));
   const minLag = Math.max(2, Math.floor(rate / 900));

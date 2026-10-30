@@ -54,7 +54,7 @@ function setup(getUserMedia) {
       return [...get("#string-buttons").children, ...get("#string-drawing").children];
     },
   };
-  const audio = { frequency: 0, contexts: [], tracks: [] };
+  const audio = { frequency: 0, amplitude: 0.5, contexts: [], tracks: [] };
   const createStream = () => {
     const track = { stopped: false, stop() { this.stopped = true; }, addEventListener() {} };
     audio.tracks.push(track);
@@ -69,7 +69,7 @@ function setup(getUserMedia) {
     createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
     createAnalyser() {
       return { getFloatTimeDomainData(samples) {
-        for (let i = 0; i < samples.length; i++) samples[i] = audio.frequency ? 0.5 * Math.sin(2 * Math.PI * audio.frequency * i / 48000) : 0;
+        for (let i = 0; i < samples.length; i++) samples[i] = audio.frequency ? audio.amplitude * Math.sin(2 * Math.PI * audio.frequency * i / 48000) : 0;
       } };
     }
   }
@@ -176,6 +176,27 @@ test("auto mode finds every instrument's strings by pitch, including both guitar
     }
   }
 });
+
+for (const mode of ["manual", "auto"]) {
+  test(`${mode} mode detects quiet high E and clears the reading when it fades out`, async () => {
+    const app = setup();
+    if (mode === "auto") app.modes[1].click();
+    else app.get("#string-buttons").children[5].click();
+    await app.get("#mic-button").click();
+    app.audio.frequency = pitch.noteFrequency(64);
+    let time = 0;
+    for (const amplitude of [0.01, 0.006, 0.004]) {
+      app.audio.amplitude = amplitude;
+      for (let i = 0; i < 6; i++) app.tick(time += 100);
+      assert.equal(app.get("#target-detail").textContent, "String 1 · Target 329.63 Hz");
+      assert.equal(app.get(".tuning-panel").dataset.state, "tuned");
+      assert.equal(app.get("#string-buttons").children[5].dataset.state, "tuned");
+    }
+    app.audio.amplitude = 0.0005;
+    for (let i = 0; i < 8; i++) app.tick(time += 100);
+    assert.equal(app.get(".tuning-panel").dataset.state, "idle");
+  });
+}
 
 test("auto selection resists transient notes and boundary jitter, and ignores silence", async () => {
   const app = setup();

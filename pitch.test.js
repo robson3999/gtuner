@@ -26,6 +26,22 @@ for (const sampleRate of [44100, 48000]) {
       }
     }
   });
+  test(`quiet high E remains detectable as it decays at ${sampleRate} Hz`, () => {
+    for (const cents of [-35, 0, 35]) {
+      const expected = noteFrequency(64) * 2 ** (cents / 1200);
+      for (const amplitude of [0.004, 0.006, 0.01]) {
+        const actual = detectPitch(tone(expected, sampleRate, [1], amplitude), sampleRate);
+        assert.ok(actual && Math.abs(centsFromTarget(actual, expected)) < 3, `amplitude ${amplitude}: got ${actual}`);
+      }
+      let seed = 42;
+      const pluck = tone(expected, sampleRate, [0.65, 0.3, 0.05], 0.008).map((value, i) => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return value * Math.exp(-i / sampleRate / 0.5) + (seed / 2 ** 32 - 0.5) * 0.002;
+      });
+      const actual = detectPitch(pluck, sampleRate);
+      assert.ok(actual && Math.abs(centsFromTarget(actual, expected)) < 3, `decaying pluck with noise: got ${actual}`);
+    }
+  });
 }
 
 test("rejects silence, DC offset, quiet tones, and deterministic broadband noise", () => {
@@ -37,7 +53,9 @@ test("rejects silence, DC offset, quiet tones, and deterministic broadband noise
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return (seed / 2 ** 32 - 0.5) * 0.5;
   });
-  assert.equal(detectPitch(noise, 48000), null);
+  for (const amplitude of [0.01, 0.04, 1]) {
+    assert.equal(detectPitch(noise.map((value) => value * amplitude), 48000), null);
+  }
 });
 
 test("tuning thresholds and direction; wrong octaves never count as in tune", () => {
