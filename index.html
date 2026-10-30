@@ -4,10 +4,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f5f3eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Tuner">
     <meta name="description" content="A simple, private microphone tuner for guitar, ukulele, mandolin, and bass.">
     <title>Tuner — find your frequency</title>
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
     <link rel="stylesheet" href="./styles.css">
     <script type="module" src="./app.js"></script>
+    <script type="module" src="./pwa.js"></script>
   </head>
   <body>
     <div class="page">
@@ -33,6 +38,7 @@
             <button id="mic-button" class="primary-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><span>Start tuning</span></button>
             <p id="error" class="error" role="alert" hidden></p>
             <p class="privacy">Your microphone stays on your device.<br>No recordings. No uploads.</p>
+            <p id="offline-status" class="privacy" role="status" hidden></p>
           </section>
           <section class="instrument-panel" aria-labelledby="instrument-title">
             <div class="panel-heading"><h2 id="instrument-title">Acoustic guitar</h2><span id="tuning-name" class="tuning-name">Standard tuning</span></div>
