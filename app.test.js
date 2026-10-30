@@ -54,9 +54,9 @@ function setup(getUserMedia) {
       return [...get("#string-buttons").children, ...get("#string-drawing").children];
     },
   };
-  const audio = { frequency: 0, amplitude: 0.5, contexts: [], tracks: [] };
+  const audio = { frequency: 0, amplitude: 0.5, harmonics: [1], contexts: [], tracks: [], locks: [], settings: {} };
   const createStream = () => {
-    const track = { stopped: false, stop() { this.stopped = true; }, addEventListener() {} };
+    const track = { stopped: false, stop() { this.stopped = true; }, addEventListener() {}, getSettings: () => audio.settings };
     audio.tracks.push(track);
     return { getTracks: () => [track], getAudioTracks: () => [track] };
   };
@@ -69,14 +69,23 @@ function setup(getUserMedia) {
     createMediaStreamSource() { return { connect() {}, disconnect() {} }; }
     createAnalyser() {
       return { getFloatTimeDomainData(samples) {
-        for (let i = 0; i < samples.length; i++) samples[i] = audio.frequency ? audio.amplitude * Math.sin(2 * Math.PI * audio.frequency * i / 48000) : 0;
+        for (let i = 0; i < samples.length; i++) {
+          samples[i] = audio.frequency ? audio.harmonics.reduce((sum, gain, h) => sum + audio.amplitude * gain * Math.sin(2 * Math.PI * audio.frequency * (h + 1) * i / 48000), 0) : 0;
+        }
       } };
     }
   }
   let callback;
   vm.runInNewContext(readFileSync(new URL("./app.js", import.meta.url), "utf8").replace(/^import .*;\n/, ""), {
     ...pitch, document, window: { isSecureContext: true, AudioContext, addEventListener() {} },
-    navigator: { mediaDevices: { getUserMedia: getUserMedia || (async () => createStream()) } },
+    navigator: {
+      mediaDevices: { getUserMedia: getUserMedia || (async () => createStream()) },
+      wakeLock: { async request(type) {
+        const lock = { type, released: false, async release() { this.released = true; } };
+        audio.locks.push(lock);
+        return lock;
+      } },
+    },
     performance: { now: () => 0 },
     requestAnimationFrame(next) { callback = next; return 1; },
     cancelAnimationFrame() { callback = undefined; },
@@ -145,11 +154,86 @@ test("hiding the page cancels pending microphone access and stops late tracks", 
   await pending;
   assert.ok(app.audio.tracks[0].stopped);
   assert.equal(app.audio.contexts[0].state, "closed");
+  assert.ok(app.audio.locks.every((lock) => lock.released));
   assert.equal(app.get("#mic-status").textContent, "Mic off");
+});
+
+test("keeps the screen awake while tuning and lets it sleep after stopping", async () => {
+  const app = setup();
+  await app.get("#mic-button").click();
+  await Promise.resolve();
+  assert.equal(app.audio.locks.length, 1);
+  assert.equal(app.audio.locks[0].type, "screen");
+  assert.equal(app.audio.locks[0].released, false);
+  app.get("#mic-button").click();
+  assert.equal(app.audio.locks[0].released, true);
+});
+
+test("shows the audio rate and whether the phone applied voice processing", async () => {
+  const app = setup();
+  app.audio.settings = { sampleRate: 48000, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
+  await app.get("#mic-button").click();
+  assert.equal(app.get("#audio-info").hidden, false);
+  assert.equal(app.get("#audio-info").textContent, "Audio 48 kHz · Voice processing off");
+  app.get("#mic-button").click();
+  assert.equal(app.get("#audio-info").hidden, true);
+  app.audio.settings = { sampleRate: 44100, echoCancellation: true, noiseSuppression: true };
+  await app.get("#mic-button").click();
+  assert.equal(app.get("#audio-info").textContent, "Audio 48 kHz · mic 44.1 kHz · Voice processing on (echo cancellation, noise suppression); readings may drop out");
+});
+
+test("auto is the default selection mode", async () => {
+  assert.match(readFileSync(new URL("./index.html", import.meta.url), "utf8"), /data-mode="auto" aria-pressed="true"/);
+  const app = setup();
+  await app.get("#mic-button").click();
+  assert.equal(app.get("#guidance").textContent, "Pluck any open string.");
+  app.audio.frequency = pitch.noteFrequency(45);
+  for (let time = 100; time <= 600; time += 100) app.tick(time);
+  assert.equal(app.get("#target-note").textContent, "A");
+});
+
+test("the reading follows a tuning change within 150 ms", async () => {
+  const app = setup();
+  await app.get("#mic-button").click();
+  const target = pitch.noteFrequency(40);
+  app.audio.frequency = target * 2 ** (-15 / 1200);
+  let time = 0;
+  while (time < 500) app.tick(time += 1000 / 60);
+  assert.equal(app.get(".tuning-panel").dataset.state, "close");
+  app.audio.frequency = target;
+  const changed = time;
+  while (app.get(".tuning-panel").dataset.state !== "tuned" && time < changed + 1000) app.tick(time += 1000 / 60);
+  assert.ok(time - changed <= 150, `took ${Math.round(time - changed)} ms`);
+});
+
+test("intermittent dropouts while turning the peg don't freeze the reading", async () => {
+  const app = setup();
+  await app.get("#mic-button").click();
+  const target = pitch.noteFrequency(40);
+  let time = 0;
+  for (const cents of [-15, -10, -5, 0]) {
+    for (let i = 0; i < 6; i++) {
+      app.audio.frequency = i % 2 ? 0 : target * 2 ** (cents / 1200);
+      app.tick(time += 100);
+    }
+  }
+  assert.equal(app.get(".tuning-panel").dataset.state, "tuned");
+});
+
+test("manual mode isn't fooled into an octave by a weak fundamental", async () => {
+  const app = setup();
+  app.get("#string-buttons").children[0].click();
+  await app.get("#mic-button").click();
+  app.audio.frequency = pitch.noteFrequency(40);
+  app.audio.harmonics = [0.1, 1];
+  for (let time = 100; time <= 600; time += 100) app.tick(time);
+  assert.equal(app.get(".tuning-panel").dataset.state, "tuned");
+  assert.match(app.get("#measurement").textContent, /^82\.4 Hz/);
 });
 
 test("manual mode keeps the chosen string when another string sounds", async () => {
   const app = setup();
+  app.modes[0].click();
   await app.get("#mic-button").click();
   app.audio.frequency = pitch.noteFrequency(45);
   for (let time = 100; time <= 600; time += 100) app.tick(time);

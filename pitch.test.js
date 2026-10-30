@@ -2,8 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { detectPitch, centsFromTarget, tuningState, noteFrequency, instruments } from "./pitch.js";
 
+// Signals match the app's 4096-sample analysis window.
 function tone(frequency, sampleRate, harmonics = [0.5], amplitude = 1) {
-  return Float32Array.from({ length: 8192 }, (_, i) => amplitude * harmonics.reduce((sum, gain, h) => sum + gain * Math.sin(2 * Math.PI * frequency * (h + 1) * i / sampleRate + 0.3), 0));
+  return Float32Array.from({ length: 4096 }, (_, i) => amplitude * harmonics.reduce((sum, gain, h) => sum + gain * Math.sin(2 * Math.PI * frequency * (h + 1) * i / sampleRate + 0.3), 0));
 }
 
 for (const sampleRate of [44100, 48000]) {
@@ -44,12 +45,42 @@ for (const sampleRate of [44100, 48000]) {
   });
 }
 
+test("stiff wound-string overtones don't pull the reading sharp", () => {
+  let seed = 7;
+  const random = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 2 ** 32;
+  // Partials of a stiff string run sharp, f(n) = n·f0·√(1 + B·n²); higher partials fade faster.
+  for (const [midi, stiffness] of [[40, 1e-4], [45, 8e-5], [50, 6e-5]]) {
+    for (const cents of [-20, 0, 20]) {
+      const expected = noteFrequency(midi) * 2 ** (cents / 1200);
+      const phases = Array.from({ length: 40 }, () => random() * 2 * Math.PI);
+      const pluck = Float32Array.from({ length: 4096 }, (_, i) => {
+        const t = 0.4 + i / 48000;
+        return phases.reduce((sum, phase, h) => {
+          const n = h + 1;
+          return sum + 0.3 * Math.abs(Math.sin(Math.PI * n * 0.18)) / n * Math.exp(-t * (1 + 0.3 * n) / 2) * Math.sin(2 * Math.PI * n * expected * Math.sqrt(1 + stiffness * n * n) * t + phase);
+        }, 0);
+      });
+      const actual = detectPitch(pluck, 48000);
+      assert.ok(actual && Math.abs(centsFromTarget(actual, expected)) < 1.5, `${expected}: got ${actual}`);
+    }
+  }
+});
+
+test("a range around the selected string avoids octave slips on a weak fundamental", () => {
+  const expected = noteFrequency(40);
+  const signal = tone(expected, 48000, [0.1, 1]);
+  // The full-range search reads this signal an octave up.
+  assert.ok(Math.abs(centsFromTarget(detectPitch(signal, 48000), expected) - 1200) < 3);
+  const actual = detectPitch(signal, 48000, expected / 2 ** (7 / 12), expected * 2 ** (7 / 12));
+  assert.ok(actual && Math.abs(centsFromTarget(actual, expected)) < 3, `got ${actual}`);
+});
+
 test("rejects silence, DC offset, quiet tones, and deterministic broadband noise", () => {
-  assert.equal(detectPitch(new Float32Array(8192), 48000), null);
-  assert.equal(detectPitch(new Float32Array(8192).fill(0.2), 48000), null);
+  assert.equal(detectPitch(new Float32Array(4096), 48000), null);
+  assert.equal(detectPitch(new Float32Array(4096).fill(0.2), 48000), null);
   assert.equal(detectPitch(tone(110, 48000, [0.5], 0.001), 48000), null);
   let seed = 42;
-  const noise = Float32Array.from({ length: 8192 }, () => {
+  const noise = Float32Array.from({ length: 4096 }, () => {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return (seed / 2 ** 32 - 0.5) * 0.5;
   });

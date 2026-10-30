@@ -13,16 +13,18 @@ python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
 Open http://localhost:8000. Use a local server, not a `file://` URL (JavaScript modules
-need HTTP). Select an instrument and a string, click **Start tuning**, allow the
-microphone, and pluck that open string. Mute other strings. Select each mandolin pair
+need HTTP). Select an instrument, click **Start tuning**, allow the microphone, and
+pluck an open string. Mute other strings. Select each mandolin pair
 and tune its strings individually, muting the partner string.
 
 Use the **Manual / Auto** toggle above the string buttons to choose how strings are
-selected. Manual is the default. Auto selects the closest target pitch for the chosen
+selected. Auto is the default. Auto selects the closest target pitch for the chosen
 instrument after a few steady readings, with a small margin to prevent flickering
 between neighboring strings. It distinguishes octaves, including the guitar’s two E
 strings. Tapping a string returns to Manual; switching to Manual keeps the current
-string selected. Auto mode stays enabled when changing instruments.
+string selected. Auto mode stays enabled when changing instruments. Manual only listens
+within a fifth of the selected string, so a weak low fundamental can't be misread an
+octave up.
 
 The selected note and string turn red when more than 20 cents out, yellow within
 20 cents, and green within 5 cents. One cent is 1/100 of a semitone. The meter spans
@@ -30,7 +32,14 @@ The selected note and string turn red when more than 20 cents out, yellow within
 reading. Colors represent the current sound, not saved completion marks.
 
 **Stop tuning**, hiding the tab, or leaving the page releases the microphone. Returning
-to the page requires another click on **Start tuning**.
+to the page requires another click on **Start tuning**. Where the browser supports it,
+the screen stays awake while tuning so auto-lock doesn't end the session.
+
+While tuning, a small line below the button shows the audio sample rate and whether the
+device applied voice processing (echo cancellation, noise suppression, auto gain). The
+tuner asks for it to be off; if the device applied it anyway, sustained notes may be
+suppressed and readings may drop out. A separately listed mic rate means it differs
+from the audio rate.
 
 ## Host on GitHub Pages
 
@@ -78,10 +87,11 @@ npm test
 ```
 
 The pitch tests use synthetic signals at 44.1 and 48 kHz, including all supported
-strings, detuning, strong harmonics, silence, quiet signals, and noise. Application
-tests use DOM and audio doubles to check string selection, tuning feedback, recovery
-after silence, permission errors, and microphone cleanup, including a pending request
-when the tab is hidden. Service worker tests check offline launches and page assets
+strings, detuning, strong harmonics, sharp stiff-string overtones, weak fundamentals,
+silence, quiet signals, and noise. Application tests use DOM and audio doubles to check
+string selection, tuning feedback, response time, recovery after silence and brief
+dropouts, the screen wake lock, the audio diagnostics line, permission errors, and
+microphone cleanup, including a pending request when the tab is hidden. Service worker tests check offline launches and page assets
 at both the site root and `/tuner/`, plus isolation from other apps' caches.
 These checks do not replace rendering in a browser or testing with an actual
 microphone and instrument.
@@ -90,12 +100,17 @@ microphone and instrument.
 
 - Standard tunings only. Reference pitch is A4 = 440 Hz.
 - Auto chooses the closest standard string pitch. Use Manual for a very out-of-tune
-  string, whose pitch may be closer to another string’s target.
+  string, whose pitch may be closer to another string’s target. In Manual, a string
+  plucked more than a fifth from the selected one may read as a lower octave.
 - Intended for one open string at a time, not chords or noisy environments.
 - The YIN-style detector searches 30–900 Hz, including bass E1 and mandolin E5.
-  It does not fold incorrect octaves into the expected note.
-- A short median filter steadies readings. A weak fundamental or loud background
-  note can still confuse the detector. Phone microphones may struggle with low bass.
+  It does not fold incorrect octaves into the expected note. A second pass that keeps
+  only the note's first few harmonics stops the sharp upper overtones of wound strings
+  from pulling readings sharp.
+- Readings are taken about every 30 ms from an 85 ms window; a short median filter
+  steadies them, and brief dropouts don't reset it. In Auto, a weak fundamental or
+  loud background note can still confuse the detector. Phone microphones may struggle
+  with low bass.
 - Browser audio processing constraints are requests; devices may not honor them.
 - Desktop and mobile layouts are supported; real-device microphone quality and
   browser permission behavior need manual verification.

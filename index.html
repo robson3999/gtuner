@@ -37,16 +37,17 @@
             <p id="measurement" class="measurement">Start the microphone when you’re ready.</p>
             <button id="mic-button" class="primary-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><span>Start tuning</span></button>
             <p id="error" class="error" role="alert" hidden></p>
+            <p id="audio-info" class="privacy" hidden></p>
             <p class="privacy">Your microphone stays on your device.<br>No recordings. No uploads.</p>
             <p id="offline-status" class="privacy" role="status" hidden></p>
           </section>
           <section class="instrument-panel" aria-labelledby="instrument-title">
             <div class="panel-heading"><h2 id="instrument-title">Acoustic guitar</h2><span id="tuning-name" class="tuning-name">Standard tuning</span></div>
             <div class="string-controls">
-              <p class="select-hint">Pick a string</p>
+              <p class="select-hint">Pluck any string</p>
               <div class="selection-mode" role="group" aria-label="String selection mode">
-                <button type="button" data-mode="manual" aria-pressed="true">Manual</button>
-                <button type="button" data-mode="auto" aria-pressed="false">Auto</button>
+                <button type="button" data-mode="manual" aria-pressed="false">Manual</button>
+                <button type="button" data-mode="auto" aria-pressed="true">Auto</button>
               </div>
             </div>
             <div id="string-buttons" class="string-buttons" role="group" aria-label="Choose a string"></div>

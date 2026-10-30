@@ -4,7 +4,7 @@ const $ = (selector) => document.querySelector(selector);
 const micButton = $("#mic-button");
 let instrument = "guitar";
 let selected = 0;
-let selectionMode = "manual";
+let selectionMode = "auto";
 let context;
 let stream;
 let source;
@@ -16,6 +16,7 @@ let generation = 0;
 let history = [];
 let lastSignal = 0;
 let lastFrame = 0;
+let wakeLock;
 
 function clearReading() {
   history = [];
@@ -125,10 +126,14 @@ function showPitch(frequency) {
 function listen(time) {
   if (!running) return;
   frame = requestAnimationFrame(listen);
-  if (time - lastFrame < 80) return;
+  if (time - lastFrame < 30) return;
   lastFrame = time;
   analyser.getFloatTimeDomainData(samples);
-  const frequency = detectPitch(samples, context.sampleRate);
+  // Manual only searches within a fifth of the chosen string, so an octave slip can't mislead.
+  const target = noteFrequency(instruments[instrument].midi[selected]);
+  const frequency = selectionMode === "manual"
+    ? detectPitch(samples, context.sampleRate, target / 2 ** (7 / 12), target * 2 ** (7 / 12))
+    : detectPitch(samples, context.sampleRate);
   if (frequency) {
     lastSignal = time;
     if (history.length && Math.abs(centsFromTarget(frequency, history[history.length - 1])) > 60) history = [];
@@ -138,9 +143,8 @@ function listen(time) {
       const sorted = [...history].sort((a, b) => a - b);
       showPitch(sorted[Math.floor(sorted.length / 2)]);
     }
-  } else {
-    history = [];
   }
+  // Brief dropouts keep the history; sustained silence clears it.
   if (time - lastSignal > 600) clearReading();
 }
 
@@ -151,12 +155,27 @@ function stopMicrophone() {
   stream?.getTracks().forEach((track) => track.stop());
   source?.disconnect();
   if (context && context.state !== "closed") context.close().catch(() => {});
-  stream = source = analyser = context = undefined;
+  wakeLock?.release().catch(() => {});
+  stream = source = analyser = context = wakeLock = undefined;
   micButton.disabled = false;
   micButton.querySelector("span").textContent = "Start tuning";
   $("#mic-status").textContent = "Mic off";
   $("#mic-status").classList.remove("active");
+  $("#audio-info").hidden = true;
   clearReading();
+}
+
+// Shows what the phone actually applied; voice processing can suppress a sustained note.
+function showAudioInfo() {
+  const settings = stream.getAudioTracks()[0].getSettings?.() || {};
+  const processing = { echoCancellation: "echo cancellation", noiseSuppression: "noise suppression", autoGainControl: "auto gain" };
+  const active = Object.keys(processing).filter((key) => settings[key]).map((key) => processing[key]);
+  const details = [`Audio ${context.sampleRate / 1000} kHz`];
+  if (settings.sampleRate && settings.sampleRate !== context.sampleRate) details.push(`mic ${settings.sampleRate / 1000} kHz`);
+  if (active.length) details.push(`Voice processing on (${active.join(", ")}); readings may drop out`);
+  else if (Object.keys(processing).some((key) => key in settings)) details.push("Voice processing off");
+  $("#audio-info").textContent = details.join(" · ");
+  $("#audio-info").hidden = false;
 }
 
 async function startMicrophone() {
@@ -167,6 +186,11 @@ async function startMicrophone() {
     return;
   }
   const request = ++generation;
+  // Keep the screen on while tuning; auto-lock would hide the page and stop the microphone.
+  navigator.wakeLock?.request("screen").then((lock) => {
+    if (request === generation) wakeLock = lock;
+    else lock.release().catch(() => {});
+  }).catch(() => {});
   micButton.disabled = true;
   micButton.querySelector("span").textContent = "Allow microphone access…";
   try {
@@ -183,7 +207,7 @@ async function startMicrophone() {
     stream = incoming;
     source = context.createMediaStreamSource(stream);
     analyser = context.createAnalyser();
-    analyser.fftSize = 8192;
+    analyser.fftSize = 4096;
     samples = new Float32Array(analyser.fftSize);
     source.connect(analyser);
     // Never connect the microphone to the speakers (avoids feedback).
@@ -196,6 +220,7 @@ async function startMicrophone() {
     micButton.querySelector("span").textContent = "Stop tuning";
     $("#mic-status").textContent = "Listening";
     $("#mic-status").classList.add("active");
+    showAudioInfo();
     frame = requestAnimationFrame(listen);
   } catch (error) {
     if (request !== generation) return;
