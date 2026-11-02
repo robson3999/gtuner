@@ -1,7 +1,8 @@
 # Tuner
 
 A buildless HTML, CSS, and JavaScript microphone tuner for guitar, high-G ukulele,
-mandolin, and four-string bass. Audio is analyzed locally, never recorded or uploaded.
+mandolin, and four-string bass, plus a chromatic tuner for any note. Audio is analyzed
+locally, never recorded or uploaded.
 There are no runtime dependencies, accounts, or backend services.
 
 ## Run locally
@@ -30,6 +31,12 @@ The selected note and string turn red when more than 20 cents out, yellow within
 20 cents, and green within 5 cents. One cent is 1/100 of a semitone. The meter spans
 ±50 cents; the numerical reading continues beyond that range. Gray means no reliable
 reading. Colors represent the current sound, not saved completion marks.
+
+The **Chromatic** tab has no preset strings. It shows the nearest of the 12 notes, with
+its octave, for whatever it hears (any instrument or a voice) and lights that note in
+a 12-note strip using the same colors; green means a clean note within 5 cents. Notes
+use sharps (C♯, not D♭). It shares the detector's 30–900 Hz range, so notes above
+about A5 aren't shown.
 
 **Stop tuning**, hiding the tab, or leaving the page releases the microphone. Returning
 to the page requires another click on **Start tuning**. Where the browser supports it,
@@ -89,7 +96,7 @@ npm test
 The pitch tests use synthetic signals at 44.1 and 48 kHz, including all supported
 strings, detuning, strong harmonics, sharp stiff-string overtones, weak fundamentals,
 silence, quiet signals, and noise. Application tests use DOM and audio doubles to check
-string selection, tuning feedback, response time, recovery after silence and brief
+string selection, chromatic note naming, tuning feedback, response time, recovery after silence and brief
 dropouts, the screen wake lock, the audio diagnostics line, permission errors, and
 microphone cleanup, including a pending request when the tab is hidden. Service worker tests check offline launches and page assets
 at both the site root and `/tuner/`, plus isolation from other apps' caches.
