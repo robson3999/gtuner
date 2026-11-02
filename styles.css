@@ -15,7 +15,7 @@ button:disabled { cursor: wait; opacity: .7; }
 .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 2px; }
 h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: clamp(36px, 5vw, 54px); letter-spacing: -2px; margin: 12px 0; }
 .intro > p:last-child { color: var(--muted); font-size: 15px; }
-.instruments { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; max-width: 650px; padding: 5px; margin: 30px auto; background: #eaece2; border: 1px solid var(--line); border-radius: 14px; }
+.instruments { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; max-width: 650px; padding: 5px; margin: 30px auto; background: #eaece2; border: 1px solid var(--line); border-radius: 14px; }
 .instruments button { border: 0; background: transparent; border-radius: 10px; padding: 13px 8px; color: var(--muted); font-size: 14px; font-weight: 600; }
 .instruments button span { display: block; font-size: 10px; font-weight: 400; margin-top: 4px; }
 .instruments button[aria-pressed="true"] { background: var(--ink); color: #fffef6; box-shadow: 0 2px 5px #253c3420; }
@@ -55,6 +55,11 @@ h2 { font-size: 13px; font-weight: 600; margin: 0; }
 .string-button sub { font-size: 10px; vertical-align: baseline; font-weight: 400; }
 .string-button[aria-pressed="true"] { outline: 2px solid currentColor; outline-offset: 3px; background: #fffef9; }
 .instrument-art { display: block; width: 100%; max-height: 360px; overflow: visible; }
+.note-strip { display: none; grid-template-columns: repeat(6, minmax(0, 52px)); justify-content: space-around; gap: 12px 5px; margin: 16px 0; }
+.instrument-panel.chromatic .note-strip { display: grid; }
+.instrument-panel.chromatic :is(.string-controls, .string-buttons, .instrument-art) { display: none; }
+.note-chip { display: grid; place-items: center; height: 48px; color: #737b71; background: #f8f8f0; border: 1px solid #d7dbce; border-radius: 12px; font-size: 20px; font-weight: 600; }
+.note-chip[data-state] { color: var(--feedback); background: #fffef9; outline: 2px solid currentColor; outline-offset: 3px; }
 .instrument-string { color: #a3a293; transition: color .15s; }
 .instrument-string.selected { color: var(--ink); }
 [data-state="far"] { --feedback: var(--red); }

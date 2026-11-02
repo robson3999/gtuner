@@ -1,6 +1,6 @@
 const CACHE_PREFIX = `tuner-${self.registration.scope}-`;
 // Bump this version whenever any cached file changes.
-const CACHE_NAME = `${CACHE_PREFIX}v3`;
+const CACHE_NAME = `${CACHE_PREFIX}v4`;
 const ASSETS = [
   "./",
   "./index.html",

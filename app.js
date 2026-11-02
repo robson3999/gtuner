@@ -17,16 +17,17 @@ let history = [];
 let lastSignal = 0;
 let lastFrame = 0;
 let wakeLock;
+const noteNames = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
 
 function clearReading() {
   history = [];
+  const chromatic = instrument === "chromatic";
   $(".tuning-panel").dataset.state = "idle";
   $("#needle").style.opacity = "0";
-  $("#guidance").textContent = running
-    ? selectionMode === "auto" ? "Pluck any open string." : "Pluck the selected string."
-    : "Let’s hear your first string.";
+  $("#guidance").textContent = !running ? `Let’s hear your first ${chromatic ? "note" : "string"}.`
+    : chromatic ? "Play or sing any note." : selectionMode === "auto" ? "Pluck any open string." : "Pluck the selected string.";
   $("#measurement").textContent = running ? "Listening for a clear, steady note…" : "Start the microphone when you’re ready.";
-  document.querySelectorAll(".string-button, .instrument-string").forEach((element) => delete element.dataset.state);
+  document.querySelectorAll(".string-button, .instrument-string, .note-chip").forEach((element) => delete element.dataset.state);
 }
 
 function chooseMode(mode) {
@@ -85,6 +86,16 @@ function chooseInstrument(key) {
   instrument = key;
   const config = instruments[key];
   document.querySelectorAll("[data-instrument]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.instrument === key)));
+  $(".instrument-panel").classList.toggle("chromatic", key === "chromatic");
+  if (key === "chromatic") {
+    $("#instrument-title").textContent = "Chromatic tuner";
+    $("#tuning-name").textContent = "Nearest of 12 notes";
+    $("#target-note").textContent = "–";
+    $("#target-octave").textContent = "";
+    $("#target-detail").textContent = "Any note · A4 = 440 Hz";
+    clearReading();
+    return;
+  }
   $("#instrument-title").textContent = config.name;
   $("#tuning-name").textContent = config.tuning;
   $("#string-buttons").replaceChildren(...config.notes.map((note, i) => {
@@ -103,7 +114,23 @@ function chooseInstrument(key) {
   selectString(0);
 }
 
-function showPitch(frequency) {
+// The chromatic tab targets whichever of the 12 notes is nearest.
+function showNote(frequency) {
+  const midi = Math.round(69 + centsFromTarget(frequency, 440) / 100);
+  const target = noteFrequency(midi);
+  const cents = centsFromTarget(frequency, target);
+  const state = tuningState(cents);
+  $("#target-note").textContent = noteNames[midi % 12];
+  $("#target-octave").textContent = `${Math.floor(midi / 12) - 1}`;
+  $("#target-detail").textContent = `Nearest note · Target ${target.toFixed(2)} Hz`;
+  Array.from($("#note-strip").children).forEach((chip, i) => {
+    if (i === midi % 12) chip.dataset.state = state;
+    else delete chip.dataset.state;
+  });
+  return { cents, state, guidance: cents < 0 ? "Flat. Bring the pitch up." : "Sharp. Bring the pitch down." };
+}
+
+function showString(frequency) {
   if (selectionMode === "auto") {
     const distances = instruments[instrument].midi.map((midi) => Math.abs(centsFromTarget(frequency, noteFrequency(midi))));
     const closest = distances.indexOf(Math.min(...distances));
@@ -113,12 +140,18 @@ function showPitch(frequency) {
   const target = noteFrequency(instruments[instrument].midi[selected]);
   const cents = centsFromTarget(frequency, target);
   const state = tuningState(cents);
-  $(".tuning-panel").dataset.state = state;
   $("#string-buttons").children[selected].dataset.state = state;
   $("#string-drawing").children[selected].dataset.state = state;
+  return { cents, state, guidance: cents < 0 ? "Too low. Tighten slowly." : "Too high. Loosen slowly." };
+}
+
+function showPitch(frequency) {
+  const reading = instrument === "chromatic" ? showNote(frequency) : showString(frequency);
+  const { cents, state } = reading;
+  $(".tuning-panel").dataset.state = state;
   $("#needle").style.opacity = "1";
   $("#needle").style.left = `${50 + Math.max(-50, Math.min(50, cents))}%`;
-  const guidance = state === "tuned" ? "That’s the sweet spot." : cents < 0 ? "Too low. Tighten slowly." : "Too high. Loosen slowly.";
+  const guidance = state === "tuned" ? "That’s the sweet spot." : reading.guidance;
   if ($("#guidance").textContent !== guidance) $("#guidance").textContent = guidance;
   $("#measurement").textContent = `${frequency.toFixed(1)} Hz · ${cents >= 0 ? "+" : ""}${Math.round(cents)} cents${state === "tuned" ? " · In tune" : ""}`;
 }
@@ -130,8 +163,8 @@ function listen(time) {
   lastFrame = time;
   analyser.getFloatTimeDomainData(samples);
   // Manual only searches within a fifth of the chosen string, so an octave slip can't mislead.
-  const target = noteFrequency(instruments[instrument].midi[selected]);
-  const frequency = selectionMode === "manual"
+  const target = instrument !== "chromatic" && selectionMode === "manual" && noteFrequency(instruments[instrument].midi[selected]);
+  const frequency = target
     ? detectPitch(samples, context.sampleRate, target / 2 ** (7 / 12), target * 2 ** (7 / 12))
     : detectPitch(samples, context.sampleRate);
   if (frequency) {
@@ -238,6 +271,12 @@ async function startMicrophone() {
 document.querySelectorAll("[data-instrument]").forEach((button) => button.addEventListener("click", () => chooseInstrument(button.dataset.instrument)));
 document.querySelectorAll("[data-mode]").forEach((button) => button.addEventListener("click", () => chooseMode(button.dataset.mode)));
 micButton.addEventListener("click", () => running ? stopMicrophone() : startMicrophone());
+$("#note-strip").replaceChildren(...noteNames.map((name) => {
+  const chip = document.createElement("span");
+  chip.className = "note-chip";
+  chip.textContent = name;
+  return chip;
+}));
 document.addEventListener("visibilitychange", () => { if (document.hidden) stopMicrophone(); });
 window.addEventListener("pagehide", stopMicrophone);
 chooseInstrument("guitar");

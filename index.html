@@ -26,6 +26,7 @@
           <button type="button" data-instrument="ukulele" aria-pressed="false">Ukulele <span>4 strings</span></button>
           <button type="button" data-instrument="mandolin" aria-pressed="false">Mandolin <span>4 pairs</span></button>
           <button type="button" data-instrument="bass" aria-pressed="false">Bass <span>4 strings</span></button>
+          <button type="button" data-instrument="chromatic" aria-pressed="false">Chromatic <span>Any note</span></button>
         </div>
         <div class="workspace">
           <section class="tuning-panel" aria-label="Tuning meter" data-state="idle">
@@ -51,6 +52,7 @@
               </div>
             </div>
             <div id="string-buttons" class="string-buttons" role="group" aria-label="Choose a string"></div>
+            <div id="note-strip" class="note-strip" aria-hidden="true"></div>
             <svg id="instrument-art" class="instrument-art" viewBox="0 0 600 470" role="img" aria-label="Guitar with six strings"><defs><linearGradient id="wood" x1="0" x2="1" y2="1"><stop stop-color="#e4b879"/><stop offset="1" stop-color="#bc8052"/></linearGradient></defs><g id="instrument-drawing"></g><g id="string-drawing"></g></svg>
             <div class="legend"><span><i class="red"></i>Out of tune</span><span><i class="yellow"></i>Getting close</span><span><i class="green"></i>In tune</span></div>
           </section>

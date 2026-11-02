@@ -36,6 +36,8 @@ function setup(getUserMedia) {
     button.dataset.instrument = key;
     return button;
   });
+  const chromatic = new Element();
+  chromatic.dataset.instrument = "chromatic";
   const modes = ["manual", "auto"].map((mode) => {
     const button = new Element();
     button.dataset.mode = mode;
@@ -47,11 +49,11 @@ function setup(getUserMedia) {
     createElement: () => new Element(),
     addEventListener(name, callback) { this.events[name] = callback; },
     querySelectorAll(selector) {
-      if (selector === "[data-instrument]") return selectors;
+      if (selector === "[data-instrument]") return [...selectors, chromatic];
       if (selector === "[data-mode]") return modes;
       if (selector === ".string-button") return get("#string-buttons").children;
       if (selector === ".instrument-string") return get("#string-drawing").children;
-      return [...get("#string-buttons").children, ...get("#string-drawing").children];
+      return [...get("#string-buttons").children, ...get("#string-drawing").children, ...get("#note-strip").children];
     },
   };
   const audio = { frequency: 0, amplitude: 0.5, harmonics: [1], contexts: [], tracks: [], locks: [], settings: {} };
@@ -90,7 +92,7 @@ function setup(getUserMedia) {
     requestAnimationFrame(next) { callback = next; return 1; },
     cancelAnimationFrame() { callback = undefined; },
   });
-  return { get, selectors, modes, document, audio, createStream, tick: (time) => callback(time) };
+  return { get, selectors, chromatic, modes, document, audio, createStream, tick: (time) => callback(time) };
 }
 
 test("instrument selection updates labels, string count, and target", () => {
@@ -305,6 +307,42 @@ test("auto selection resists transient notes and boundary jitter, and ignores si
   for (let i = 0; i < 8; i++) app.tick(time += 100);
   assert.equal(app.get("#target-note").textContent, "A");
   assert.equal(app.get(".tuning-panel").dataset.state, "idle");
+});
+
+test("chromatic tab shows the nearest of all 12 notes in any octave and lights it up", async () => {
+  const app = setup();
+  app.modes[0].click();
+  app.chromatic.click();
+  assert.equal(app.chromatic.attributes["aria-pressed"], "true");
+  assert.equal(app.get("#instrument-title").textContent, "Chromatic tuner");
+  assert.equal(app.get("#target-note").textContent, "–");
+  assert.equal(app.get("#guidance").textContent, "Let’s hear your first note.");
+  assert.equal(app.get("#note-strip").children.length, 12);
+  await app.get("#mic-button").click();
+  assert.equal(app.get("#guidance").textContent, "Play or sing any note.");
+  let time = 0;
+  // Manual string selection doesn't narrow the search: 440 Hz is far above a fifth of guitar E2.
+  for (const [midi, cents, note, state, guidance] of [
+    [69, 3, "A4", "tuned", "That’s the sweet spot."],
+    [49, -15, "C♯3", "close", "Flat. Bring the pitch up."],
+    [30, 35, "F♯1", "far", "Sharp. Bring the pitch down."],
+    [79, -40, "G5", "far", "Flat. Bring the pitch up."],
+  ]) {
+    app.audio.frequency = pitch.noteFrequency(midi) * 2 ** (cents / 1200);
+    for (let i = 0; i < 6; i++) app.tick(time += 100);
+    assert.equal(app.get("#target-note").textContent + app.get("#target-octave").textContent, note);
+    assert.equal(app.get("#target-detail").textContent, `Nearest note · Target ${pitch.noteFrequency(midi).toFixed(2)} Hz`);
+    assert.equal(app.get(".tuning-panel").dataset.state, state);
+    assert.equal(app.get("#guidance").textContent, guidance);
+    assert.deepEqual(app.get("#note-strip").children.map((chip) => chip.dataset.state), Array.from({ length: 12 }, (_, i) => i === midi % 12 ? state : undefined));
+  }
+  app.audio.frequency = 0;
+  for (let i = 0; i < 8; i++) app.tick(time += 100);
+  assert.equal(app.get(".tuning-panel").dataset.state, "idle");
+  assert.equal(app.get("#target-note").textContent, "G");
+  assert.ok(app.get("#note-strip").children.every((chip) => chip.dataset.state === undefined));
+  app.selectors[0].click();
+  assert.equal(app.get("#target-detail").textContent, "String 6 · Target 82.41 Hz");
 });
 
 test("switching to manual locks the current string; tapping a string also selects manual mode", async () => {
